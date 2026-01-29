@@ -5,15 +5,20 @@ export default defineSchema({
   // Users (Students)
   users: defineTable({
     email: v.string(),
+    tokenIdentifier: v.string(), // Clerk ID
     fullName: v.string(),
     university: v.optional(v.string()),
     major: v.optional(v.string()),
+    studyStruggle: v.optional(v.string()),
     subscriptionStatus: v.union(v.literal('free'), v.literal('pro')),
     stripeCustomerId: v.optional(v.string()),
     currentStreak: v.number(),
     totalXp: v.number(),
     lastStudyDate: v.optional(v.string()), // ISO date for streak calc
-  }).index("by_email", ["email"]),
+    onboardingCompleted: v.optional(v.boolean()),
+  })
+    .index("by_email", ["email"])
+    .index("by_token", ["tokenIdentifier"]),
 
   // Courses (Created by Students)
   courses: defineTable({

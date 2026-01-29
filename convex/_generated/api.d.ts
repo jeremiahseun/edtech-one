@@ -10,6 +10,7 @@
 
 import type * as ingest from "../ingest.js";
 import type * as llm from "../llm.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -20,6 +21,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   ingest: typeof ingest;
   llm: typeof llm;
+  users: typeof users;
 }>;
 
 /**
