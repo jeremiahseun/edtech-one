@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as dashboard from "../dashboard.js";
 import type * as ingest from "../ingest.js";
 import type * as llm from "../llm.js";
 import type * as users from "../users.js";
@@ -19,6 +20,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  dashboard: typeof dashboard;
   ingest: typeof ingest;
   llm: typeof llm;
   users: typeof users;

@@ -67,6 +67,19 @@ export default defineSchema({
     })),
   }).index("by_user", ["userId"]),
 
+  // Daily Goals
+  dailyGoals: defineTable({
+    userId: v.id("users"),
+    date: v.string(), // YYYY-MM-DD
+    goals: v.array(v.object({
+      id: v.string(),
+      title: v.string(),
+      xpReward: v.number(),
+      isCompleted: v.boolean(),
+      type: v.string(), // 'quiz', 'review', 'summary', etc.
+    })),
+  }).index("by_user_date", ["userId", "date"]),
+
   // Vector Embeddings
   documents: defineTable({
     uploadId: v.id("uploads"),
