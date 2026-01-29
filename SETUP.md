@@ -15,12 +15,12 @@ npx convex dev
 
 ## 2. Configure Authentication (Clerk)
 
-We use [Clerk](https://clerk.com) for user authentication.
+We use [Clerk](https://clerk.com) for user authentication. The application is already configured to use `middleware.ts` for route protection and `<ClerkProvider>` in `app/layout.tsx`.
 
 1.  **Create a Clerk Application**: Go to the Clerk Dashboard and create a new app.
 2.  **Get API Keys**:
     *   Copy the `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`.
-    *   Add them to your `.env.local` file.
+    *   **CRITICAL**: You must add these to your `.env.local` file for the Sign In buttons to appear.
 3.  **Get JWT Issuer Domain**:
     *   In Clerk, go to **JWT Templates**.
     *   Create a new template named `convex`.
@@ -36,8 +36,9 @@ Used by the Next.js Frontend.
 
 ```bash
 # .env.local
-NEXT_PUBLIC_CONVEX_URL=...        # Auto-filled by npx convex dev
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+NEXT_PUBLIC_CONVEX_URL=...             # Auto-filled by npx convex dev
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...  # from Clerk Dashboard
+CLERK_SECRET_KEY=...                   # from Clerk Dashboard
 ```
 
 ### B. Convex Dashboard (Backend)
@@ -65,4 +66,5 @@ Used by the Convex functions (`ingest.ts`, `llm.ts`, `auth.config.ts`).
     npm run dev
     ```
 2.  Open `http://localhost:3000`.
-3.  If configured correctly, the app should load, and you should be able to sign in via Clerk.
+3.  You should now see "Sign In" and "Sign Up" buttons in the top right corner.
+4.  Try signing in. Once authenticated, the buttons will change to your User Profile.
