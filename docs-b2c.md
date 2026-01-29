@@ -14,6 +14,7 @@
 1. [Gamification & Retention](#gamification--retention)
 1. [Technology Stack & Costs](#technology-stack--costs)
 1. [Development Phases & Timeline](#development-phases--timeline)
+1. [User Interface & Screen Flows](#user-interface--screen-flows)
 1. [Monetization Strategy](#monetization-strategy)
 1. [Testing & Iteration Plan](#testing--iteration-plan)
 1. [Deployment & Scaling](#deployment--scaling)
@@ -39,7 +40,7 @@
 ### Must-Have Features:
 
 1. ✅ **Personalized Dashboard**: Student-centric view of courses and progress.
-1. ✅ **Content Ingestion (RAG)**: Upload PDF, PPTX, TXT files.
+1. ✅ **Content Ingestion (RAG)**: Upload PDF, PPTX, TXT files via Cloudflare R2.
 1. ✅ **Curriculum Generation**: AI builds a "Study Path" based on uploaded files.
 1. ✅ **Core APEX Player**: The "Video-like" renderer (adapted for older students).
 1. ✅ **Adaptive Explanations**: Concepts explained at university level.
@@ -87,7 +88,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    B2C ARCHITECTURE                          │
+│               B2C ARCHITECTURE (Convex Stack)               │
 └─────────────────────────────────────────────────────────────┘
 
                     FRONTEND (Single Page App)
@@ -98,221 +99,208 @@
 │  │   Dashboard  │  │   Manager    │  │   Player     │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └────────────────────────┬────────────────────────────────────┘
-                         │ REST API + WebSocket
+                         │ Convex Client (WebSocket/HTTP)
                          ▼
-                    BACKEND (API Server)
+                    BACKEND (Serverless)
 ┌─────────────────────────────────────────────────────────────┐
-│  Node.js + Express + TypeScript                              │
+│  Convex (The Backend-as-a-Service)                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Ingestion  │  │   Gamify     │  │    AML       │      │
-│  │   Service    │  │   Engine     │  │   Compiler   │      │
+│  │   Database   │  │   Actions    │  │    Vector    │      │
+│  │  (Documents) │  │ (3rd Party)  │  │    Search    │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │         RAG Orchestration Service                    │  │
-│  │     (Retrieval Augmented Generation pipeline)        │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-         ▼               ▼               ▼
-┌─────────────┐  ┌─────────────┐  ┌──────────────┐
-│  PostgreSQL │  │ Vector DB   │  │  OpenAI API  │
-│  (Supabase) │  │ (pgvector)  │  │ (GPT-4-Turbo)│
-└─────────────┘  └─────────────┘  └──────────────┘
-         │                               │
-         │                               │
-         ▼                               ▼
-┌─────────────┐                 ┌──────────────┐
-│   Stripe    │                 │   S3/R2      │
-│  (Payment)  │                 │  (Raw Docs)  │
-└─────────────┘                 └──────────────┘
+│         ▲               │               │                   │
+│         │               │               ▼                   │
+│         │               │      ┌─────────────────┐          │
+│         │               │      │  DeepSeek-V3    │          │
+│         │               │      │  (Reasoning)    │          │
+│         │               │      └─────────────────┘          │
+│         │               ▼                                   │
+│         │      ┌─────────────────┐  ┌─────────────────┐     │
+│         │      │  Google Gemini  │  │  Cloudflare R2  │     │
+│         │      │  1.5 Flash      │  │  (Storage)      │     │
+│         │      └─────────────────┘  └─────────────────┘     │
+└─────────┼───────────────────────────────────────────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │   Stripe    │
+    │  (Payment)  │
+    └─────────────┘
 ```
 
 -----
 
 # 4. COMPLETE IMPLEMENTATION GUIDE
 
-## 4.1 Database Schema (B2C Focused)
+## 4.1 Convex Database Schema
 
-```sql
--- Core Tables for B2C MVP
-
--- Users (Students)
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255), -- Or Supabase Auth ID
-  full_name VARCHAR(100),
-  university VARCHAR(255),
-  major VARCHAR(100),
-  subscription_status VARCHAR(50) DEFAULT 'free', -- 'free', 'pro', 'cancelled'
-  stripe_customer_id VARCHAR(255),
-  current_streak INTEGER DEFAULT 0,
-  total_xp INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Courses (Created by Students)
-CREATE TABLE courses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id),
-  title VARCHAR(255) NOT NULL, -- e.g. "Biology 101"
-  description TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Content Uploads (Raw Materials)
-CREATE TABLE uploads (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  course_id UUID REFERENCES courses(id),
-  file_name VARCHAR(255) NOT NULL,
-  file_url TEXT NOT NULL,
-  file_type VARCHAR(50), -- 'pdf', 'pptx', 'txt'
-  processing_status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'
-  token_count INTEGER,
-  uploaded_at TIMESTAMP DEFAULT NOW()
-);
-
--- Learning Paths (The AI Generated Curriculum)
-CREATE TABLE learning_paths (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  course_id UUID REFERENCES courses(id),
-  title VARCHAR(255),
-  modules JSONB, -- Array of topics/concepts derived from uploads
-  generated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Sessions (Active Study Sessions)
-CREATE TABLE sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id),
-  course_id UUID REFERENCES courses(id),
-  topic_focus VARCHAR(255),
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  conversation_history JSONB, -- Stores the chat/AML history
-  context_sources JSONB -- References to specific chunks in uploads used here
-);
-
--- Gamification / Achievements
-CREATE TABLE achievements (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id),
-  type VARCHAR(100), -- '7_day_streak', '1000_xp', 'first_upload'
-  unlocked_at TIMESTAMP DEFAULT NOW()
-);
-
--- Vector Store (pgvector extension in Supabase)
--- CREATE EXTENSION IF NOT EXISTS vector;
-CREATE TABLE document_embeddings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  upload_id UUID REFERENCES uploads(id),
-  content TEXT, -- The text chunk
-  embedding vector(1536), -- OpenAI embeddings dimension
-  metadata JSONB -- Page number, slide number, etc.
-);
-```
-
-## 4.2 Ingestion & RAG Pipeline
-
-Instead of pre-written lessons, content is generated dynamically.
+Convex uses a document-oriented schema defined in TypeScript.
 
 ```typescript
-// services/ingestion-service.ts
+// convex/schema.ts
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
 
-import { PDFLoader } from "langchain/document_loaders/fs/pdf";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { SupabaseVectorStore } from "langchain/vectorstores/supabase";
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+export default defineSchema({
+  // Users (Students)
+  users: defineTable({
+    email: v.string(),
+    fullName: v.string(),
+    university: v.optional(v.string()),
+    major: v.optional(v.string()),
+    subscriptionStatus: v.union(v.literal('free'), v.literal('pro')),
+    stripeCustomerId: v.optional(v.string()),
+    currentStreak: v.number(),
+    totalXp: v.number(),
+    lastStudyDate: v.optional(v.string()), // ISO date for streak calc
+  }).index("by_email", ["email"]),
 
-export class IngestionService {
-  async processUpload(uploadId: string, fileUrl: string, fileType: string) {
-    // 1. Download File
-    const blob = await fetch(fileUrl).then(r => r.blob());
+  // Courses (Created by Students)
+  courses: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    colorTheme: v.optional(v.string()), // For UI customization
+  }).index("by_user", ["userId"]),
 
-    // 2. Extract Text
-    let text = "";
-    if (fileType === 'pdf') {
-       const loader = new PDFLoader(blob);
-       const docs = await loader.load();
-       text = docs.map(d => d.pageContent).join("\n");
+  // Content Uploads (Raw Materials)
+  uploads: defineTable({
+    courseId: v.id("courses"),
+    fileName: v.string(),
+    storageId: v.string(), // Convex storage ID or R2 URL
+    fileType: v.string(),
+    processingStatus: v.union(
+      v.literal('pending'),
+      v.literal('processing'),
+      v.literal('completed'),
+      v.literal('failed')
+    ),
+    summary: v.optional(v.string()),
+  }).index("by_course", ["courseId"]),
+
+  // Learning Paths (The AI Generated Curriculum)
+  learningPaths: defineTable({
+    courseId: v.id("courses"),
+    modules: v.array(v.object({
+      title: v.string(),
+      description: v.string(),
+      sourceUploadIds: v.array(v.id("uploads")),
+      isCompleted: v.boolean(),
+    })),
+  }).index("by_course", ["courseId"]),
+
+  // Sessions (Active Study Sessions)
+  sessions: defineTable({
+    userId: v.id("users"),
+    courseId: v.id("courses"),
+    topic: v.string(),
+    startTime: v.number(),
+    history: v.array(v.object({
+      role: v.string(), // 'user' | 'assistant'
+      content: v.string(),
+      timestamp: v.number(),
+    })),
+  }).index("by_user", ["userId"]),
+
+  // Vector Embeddings
+  documents: defineTable({
+    uploadId: v.id("uploads"),
+    text: v.string(),
+    embedding: v.array(v.number()), // Vector for semantic search
+    metadata: v.any(),
+  }).vectorIndex("by_embedding", {
+    vectorField: "embedding",
+    dimensions: 768, // Depends on embedding model (e.g., Gemini text-embedding)
+  }),
+});
+```
+
+## 4.2 Ingestion & RAG Pipeline (Convex + Gemini)
+
+Convex Actions allow us to run long-running jobs (like calling LLMs).
+
+```typescript
+// convex/ingest.ts
+import { action, internalMutation } from "./_generated/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+export const processPdf = action({
+  args: { uploadId: v.id("uploads"), fileUrl: v.string() },
+  handler: async (ctx, args) => {
+    // 1. Fetch file from R2
+    const response = await fetch(args.fileUrl);
+    const blob = await response.blob();
+
+    // 2. Extract Text (or send to Gemini if multimodal)
+    // For cost/speed, we might use a lightweight PDF parser here
+    const text = await extractTextFromPdf(blob);
+
+    // 3. Generate Embeddings
+    const model = genAI.getGenerativeModel({ model: "embedding-001" });
+    const chunks = chunkText(text);
+
+    for (const chunk of chunks) {
+      const result = await model.embedContent(chunk);
+      const embedding = result.embedding.values;
+
+      // 4. Store in Convex Vector DB
+      await ctx.runMutation(internal.ingest.storeEmbedding, {
+        uploadId: args.uploadId,
+        text: chunk,
+        embedding: embedding
+      });
     }
-    // ... handle other formats
 
-    // 3. Chunk Text
-    const splitter = new RecursiveCharacterTextSplitter({
-      chunkSize: 1000,
-      chunkOverlap: 200,
-    });
-    const chunks = await splitter.createDocuments([text], { uploadId });
-
-    // 4. Generate Embeddings & Store
-    await SupabaseVectorStore.fromDocuments(
-      chunks,
-      new OpenAIEmbeddings(),
-      {
-        client: supabaseClient,
-        tableName: "document_embeddings",
-        queryName: "match_documents",
-      }
-    );
-
-    // 5. Generate Course Structure (Table of Contents)
-    await this.generateCourseStructure(uploadId, text);
+    // 5. Update Status
+    await ctx.runMutation(internal.ingest.completeUpload, { uploadId: args.uploadId });
   }
-
-  async generateCourseStructure(uploadId: string, fullText: string) {
-    // Call LLM to summarize and create a learning path
-    // Save to 'learning_paths' table
-  }
-}
+});
 ```
 
-## 4.3 LLM Service (Context Aware)
+## 4.3 LLM Service (DeepSeek & Gemini Strategy)
 
-The `LLMService` needs to retrieve context before generating AML.
+We use a hybrid approach:
+- **Gemini 1.5 Flash**: Fast, cheap, multimodal (can "see" diagrams in PDFs).
+- **DeepSeek-V3**: Excellent reasoning for complex math/logic questions, extremely cheap.
 
 ```typescript
-// services/llm-service.ts
+// convex/llm.ts
+import { action } from "./_generated/server";
 
-export class LLMService {
-  // ... existing setup ...
+export const generateExplanation = action({
+  args: {
+    query: v.string(),
+    contextDocs: v.array(v.string())
+  },
+  handler: async (ctx, args) => {
+    // Construct prompt
+    const context = args.contextDocs.join("\n\n");
+    const prompt = `Context:\n${context}\n\nQuestion: ${args.query}`;
 
-  async generateLessonFromContext(params: {
-    userQuery: string;
-    courseId: string;
-    history: any[];
-  }): Promise<AMLDocument> {
+    // CHOICE: Use DeepSeek for complex reasoning
+    if (isComplexQuery(args.query)) {
+      const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat", // V3
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      return await response.json();
+    }
 
-    // 1. Retrieve relevant chunks (RAG)
-    const vectorStore = await SupabaseVectorStore.fromExistingIndex(...);
-    const results = await vectorStore.similaritySearch(params.userQuery, 3, {
-      filter: { course_id: params.courseId } // conceptual filter
-    });
-
-    const contextString = results.map(r => r.pageContent).join("\n---\n");
-
-    // 2. Build System Prompt with Context
-    const systemPrompt = `
-      You are an expert university tutor.
-      Use the following SOURCE MATERIAL to answer the student's request.
-      Do not hallucinate facts outside the source material.
-
-      SOURCE MATERIAL:
-      ${contextString}
-
-      Output format: Valid AML JSON.
-      Tone: Professional, academic but encouraging.
-      Target: Undergraduate student.
-    `;
-
-    // 3. Generate AML
-    // ... call OpenAI ...
+    // DEFAULT: Use Gemini 1.5 Flash
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    return result.response.text();
   }
-}
+});
 ```
 
 -----
@@ -345,9 +333,155 @@ Since there is no teacher enforcement, the system must intrinsically motivate th
 
 -----
 
-# 6. MONETIZATION STRATEGY
+# 6. TECHNOLOGY STACK & COSTS
 
-## 6.1 Pricing Models (B2C)
+## 6.1 Core Stack
+
+| Component | Technology | Why |
+|-----------|------------|-----|
+| **Frontend** | Next.js 14 + Tailwind | Standard, fast, responsive |
+| **Backend** | **Convex** | Real-time, serverless, built-in vector search |
+| **Database** | **Convex** | Seamless type safety, reactive |
+| **Storage** | **Cloudflare R2** | Zero egress fees, AWS S3 compatible |
+| **Primary LLM** | **Gemini 1.5 Flash** | Fast, multimodal, free tier is generous |
+| **Reasoning LLM**| **DeepSeek-V3** | "Stupid cheap" (~$0.14/1M tokens), GPT-4 class logic |
+| **Auth** | Clerk or Convex Auth | Simple, secure |
+| **Payments** | Stripe | Industry standard |
+
+## 6.2 Cost Estimates (B2C Scale)
+
+**Scenario**: 1,000 active students.
+- **Convex**: $0 (Generous free tier initially) -> then usage based.
+- **R2**: ~$0.015/GB (Very cheap).
+- **DeepSeek**: 1M input tokens = $0.14. If avg student uses 50k tokens/month -> $0.007/student.
+- **Gemini**: Free tier covers significant usage (15 RPM).
+
+**Total Cost per User**: < $0.10/month (excluding stripe fees).
+**Revenue per User**: $12.00/month.
+**Margin**: > 95%.
+
+-----
+
+# 7. DEVELOPMENT PHASES & TIMELINE
+
+## Phase 0: Foundation (Week 1)
+- Setup Next.js & Convex project.
+- Configure Convex Auth (with Clerk).
+- Setup Cloudflare R2 bucket.
+
+## Phase 1: The "Knowledge Base" (Weeks 2-3)
+- Build File Upload UI (Direct upload to R2, sync to Convex).
+- Implement Ingestion Action (Gemini Embedding -> Convex Vector).
+- *Deliverable*: User uploads a PDF and can see a "Summary" of it.
+
+## Phase 2: The APEX Player (Weeks 4-5)
+- Implement the AML Renderer (Canvas).
+- Connect DeepSeek/Gemini to generate AML scripts.
+- *Deliverable*: User asks a question about the PDF, Avatar explains it visually.
+
+## Phase 3: Gamification & Polish (Week 6)
+- Add XP, Streaks, Levels (Convex tables).
+- Build "Study Dashboard".
+- *Deliverable*: The loop "Upload -> Study -> Reward" is complete.
+
+## Phase 4: Launch Prep (Week 7-8)
+- Stripe Integration.
+- Landing Page.
+- Beta Launch.
+
+-----
+
+# 9. USER INTERFACE & SCREEN FLOWS
+
+**Design Philosophy**: "Clean, Focus-Oriented, Gamified." Think *Duolingo* meets *Notion*.
+**Platform**: Desktop First (Web).
+
+## Flow 1: Onboarding & Auth
+*Goal: Get the user to sign up and understand the value prop instantly.*
+
+**Screen 1.1: Landing Page**
+- **Hero Section**: "Turn your lecture notes into a personal tutor."
+- **Visual**: Split screen showing a boring PDF on left transforming into an animated APEX lesson on right.
+- **CTA**: "Start Studying for Free".
+- **Social Proof**: "Used by students at [University Logos]".
+
+**Screen 1.2: Auth Modal (Clerk/Convex)**
+- **Features**: Google Login, Email/Password.
+- **Context**: Appears over the landing page (dimmed background).
+
+**Screen 1.3: Onboarding Questionnaire**
+- **Question 1**: "What's your major?" (Dropdown: CS, Biology, History...)
+- **Question 2**: "What's your biggest study struggle?" (Options: "Procrastination", "Hard concepts", "Boring reading").
+- **Result**: "We've customized your experience for [Major]."
+
+## Flow 2: Student Dashboard (Home)
+*Goal: Overview of progress and quick entry to study.*
+
+**Screen 2.1: The Dashboard**
+- **Top Bar**:
+  - **Streak Counter**: Fire icon + "5 Days" (Animated).
+  - **XP Bar**: "Level 3 Scholar" (Progress bar to Level 4).
+  - **Profile**: Avatar.
+- **Main Content**:
+  - **"Continue Studying"**: Large card for the most recent course (e.g., "Linear Algebra"). Button: "Resume Module 3".
+  - **"My Courses" Grid**: Cards for each course with a progress ring (%).
+  - **"Add Course" Card**: Dotted border, center plus icon.
+  - **Daily Goals Widget**: Checklist of 3 tasks (e.g., "Complete 1 lesson", "Upload 1 file").
+
+## Flow 3: Course Management
+*Goal: Organize materials and generate the curriculum.*
+
+**Screen 3.1: Course View**
+- **Header**: Course Title, Edit Button, Overall Progress.
+- **Left Sidebar**: "Syllabus" (The AI-generated modules).
+- **Main Area**: "Course Materials" (Grid of uploaded files).
+- **Action**: "Upload Material" button (Floating or prominent).
+
+**Screen 3.2: Upload Overlay**
+- **Drop Zone**: Large area to drag PDFs/PPTs.
+- **List**: Shows files queueing, uploading, and "Processing..." (with spinner).
+- **R2 Integration**: Progress bar showing direct upload speed.
+
+## Flow 4: The Study Experience (The Core)
+*Goal: Deep engagement with the content.*
+
+**Screen 4.1: The APEX Player (Lesson Mode)**
+- **Layout**: "Cinema Mode" (Dark backdrop).
+- **Center Stage**: The Canvas Renderer (Avatar + Whiteboard).
+- **Bottom Control Bar**: Play/Pause, Scrubber, "Ask Question" button.
+- **Right Sidebar (Collapsible)**:
+  - **Tab A: Chat**: History of questions asked during this session.
+  - **Tab B: Notes**: Markdown editor to take notes while watching.
+  - **Tab C: Transcript**: Rolling text of what the avatar is saying.
+
+**Screen 4.2: Interaction Overlay**
+- **Trigger**: Click "Ask Question" or AI stops at a checkpoint.
+- **UI**: The video pauses/dims. A chat input appears near the avatar.
+- **AI Response**:
+  - **Text**: Appears in a bubble.
+  - **Visual**: The avatar points to the board or draws a new diagram to explain.
+- **Feedback**: "Did this help?" (Thumbs up/down).
+
+**Screen 4.3: Lesson Complete / Summary**
+- **Visual**: Confetti animation!
+- **Stats**: "+50 XP", "Streak Extended".
+- **Summary**: "Key concepts learned: [List]".
+- **Next Step**: "Start Quiz" or "Back to Dashboard".
+
+## Flow 5: Payment
+*Goal: Conversion.*
+
+**Screen 5.1: Upgrade Modal**
+- **Trigger**: Uploading the 2nd file (if on Free tier).
+- **Comparison Table**: Free vs Pro ($12/mo).
+- **Highlight**: "Unlimited RAG", "DeepSeek Reasoning", "Streak Freeze".
+- **Payment Form**: Stripe Elements (embedded).
+
+-----
+
+# 10. MONETIZATION STRATEGY
+
+## 10.1 Pricing Models (B2C)
 
 **Freemium (The Hook)**
 - 1 Course Limit
@@ -359,7 +493,7 @@ Since there is no teacher enforcement, the system must intrinsically motivate th
 - *One-time payment option popular with students*
 - Unlimited Courses
 - Unlimited Uploads
-- Advanced RAG (GPT-4)
+- Advanced RAG (DeepSeek/Gemini)
 - Exam Prep Mode
 
 **Pro Monthly ($12 / month)**
@@ -368,7 +502,7 @@ Since there is no teacher enforcement, the system must intrinsically motivate th
 **Pro Yearly ($99 / year)**
 - Best value (~$8.25/mo).
 
-## 6.2 Revenue Projections (B2C)
+## 10.2 Revenue Projections (B2C)
 
 **Assumption**: Viral growth via campus networks.
 
@@ -383,77 +517,59 @@ Since there is no teacher enforcement, the system must intrinsically motivate th
 
 -----
 
-# 7. DEVELOPMENT PHASES & TIMELINE
+# 11. TESTING & ITERATION PLAN
 
-## Phase 0: Foundation (Week 1)
-- Setup Next.js & Supabase.
-- Enable `pgvector` extension.
-- **Crucial**: Build robust Auth (Magic Links preferred for students).
+## 11.1 Testing Strategy
 
-## Phase 1: The "Knowledge Base" (Weeks 2-3)
-- Build File Upload UI (Drag & Drop).
-- Implement Ingestion Pipeline (PDF -> Text -> Vector).
-- *Deliverable*: User uploads a PDF and can see a "Summary" of it.
+### Unit Tests
+- Convex functions can be tested using `convex-test`.
 
-## Phase 2: The APEX Player (Weeks 4-5)
-- Implement the AML Renderer (Canvas).
-- Connect LLM to Vector Store (RAG).
-- *Deliverable*: User asks a question about the PDF, Avatar explains it visually.
+### Integration Tests
+- Test the full RAG pipeline: Upload -> R2 -> Trigger -> Embed -> Vector DB.
 
-## Phase 3: Gamification & Polish (Week 6)
-- Add XP, Streaks, Levels.
-- Build "Study Dashboard".
-- *Deliverable*: The loop "Upload -> Study -> Reward" is complete.
-
-## Phase 4: Launch Prep (Week 7-8)
-- Stripe Integration.
-- Landing Page (Targeting specific majors like Engineering/Pre-med).
-- Beta Launch at 1-2 Campuses.
+### User Testing Protocol
+- **Paper Prototype**: Print the "Screen Flows" and test nav.
+- **Beta Group**: 50 students from one university.
 
 -----
 
-# 8. DEPLOYMENT & SCALING
+# 12. DEPLOYMENT & SCALING
 
-## 8.1 Vector Search Scaling
-As users upload thousands of PDFs, the vector store will grow huge.
-- **Strategy**: Use Supabase for MVP (up to ~100k vectors).
-- **Scale-up**: Migrate to Pinecone or Milvus if performance degrades > 1M vectors.
+## 12.1 Deployment Architecture
 
-## 8.2 Cost Management (OpenAI)
-B2C users can be spammy.
-- **Limit**: Rate limit "Pro" users to 500 messages/day.
-- **Optimization**: Use `gpt-3.5-turbo` for summarization and simple chat; reserve `gpt-4` for complex "Teach Me" moments.
-- **Caching**: Aggressively cache answers to common questions within the same document.
-
------
-
-# APPENDIX: AML for University Level
-
-The "Instructor" tone should be different for B2C University students.
-
-**Example AML Sequence:**
-
-```json
-{
-  "actions": [
-    {
-      "type": "instructor",
-      "content": {
-        "mode": "avatar-professional",
-        "emotion": "neutral",
-        "speak": "Based on the lecture notes you uploaded, the Professor emphasizes the 'Central Limit Theorem'. Let's break down the three conditions required for it to hold."
-      }
-    },
-    {
-      "type": "board",
-      "content": {
-        "elements": [
-          { "type": "text", "content": "1. Randomization" },
-          { "type": "text", "content": "2. Independence" },
-          { "type": "text", "content": "3. 10% Condition" }
-        ]
-      }
-    }
-  ]
-}
 ```
+Internet
+    │
+    ▼
+┌─────────────────┐
+│  Vercel (Edge)  │
+│  (Next.js App)  │
+└────────┬────────┘
+         │
+    ┌────┴────────────┐
+    │                 │
+    ▼                 ▼
+┌──────────────┐  ┌──────────────┐
+│ Convex Cloud │  │ Cloudflare R2│
+│ (Backend/DB) │  │ (Assets)     │
+└────────┬─────┘  └──────────────┘
+         │
+    ┌────┴─────────────────┐
+    │                      │
+    ▼                      ▼
+┌─────────────────┐  ┌─────────────────┐
+│  DeepSeek API   │  │  Google Gemini  │
+└─────────────────┘  └─────────────────┘
+```
+
+## 12.2 Launch Checklist
+
+### Pre-Launch
+- [ ] Convex Schema finalized.
+- [ ] R2 Bucket CORS configured.
+- [ ] DeepSeek & Gemini Keys secured.
+- [ ] Stripe Webhooks tested.
+
+### Post-Launch
+- [ ] Monitor Convex dashboard for slow queries.
+- [ ] Track AI costs per user.
