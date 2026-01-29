@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Inter } from "next/font/google";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import AuthCheck from "@/components/AuthCheck";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,7 +32,9 @@ export default function RootLayout({
         <body
           className={`${inter.variable} font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-white antialiased min-h-screen`}
         >
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ConvexClientProvider>
+            <AuthCheck>{children}</AuthCheck>
+          </ConvexClientProvider>
         </body>
       </html>
     </ClerkProvider>
