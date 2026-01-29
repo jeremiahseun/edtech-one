@@ -1,26 +1,38 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-display: var(--font-display);
+
+  --color-primary: #135bec;
+  --color-background-light: #f6f6f8;
+  --color-background-dark: #101622;
+  --color-surface-dark: #161b26;
+  --color-border-dark: #282e39;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Material Symbols Utility */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Scrollbar hiding (from Screen 3) */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Progress Ring Animation */
+.progress-ring__circle {
+    transition: stroke-dashoffset 0.35s;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.custom-select-icon {
+    appearance: none;
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuBlAjUSNbXucOWKFG9G41oPhMLAcJEMxugrj-y_M6dM1ePTbjIwBkdUOpbXWSHq7hdyexi_65192_6m0OfhjZqqMT4O_JMpZVQ-81BnryDDhoSU2R3uKs6qE6hEushAxZ22_7a0sMUXkSCxQlRk6MDaO_KgLAunI7uGUaZqvG5nJp7IIMH5jg_uCgmwNwqpZS3uFZkrDlGQpl48UKo-Pv4OAYN78bnmLPdUpvfnsKQLg_XYqeETuZTo-vaNf_m4g6th4kHVEv9XXd4);
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+}
+
+.pro-glow {
+    box-shadow: 0 0 20px rgba(19, 91, 236, 0.15);
 }

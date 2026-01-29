@@ -1,5 +1,5 @@
 {
-  "name": "apex-b2c",
+  "name": "my-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,9 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.37.0",
-    "@google/generative-ai": "^0.24.1",
-    "convex": "^1.31.6",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
