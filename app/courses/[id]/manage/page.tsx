@@ -1,230 +1,370 @@
-import Link from 'next/link';
+'use client';
 
-export default function CourseManager() {
-  return (
-    <div className="bg-background-light dark:bg-background-dark text-white font-display min-h-screen flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-[#282e39] bg-background-light dark:bg-background-dark px-10 py-3 sticky top-0 z-50">
-        <div className="flex items-center gap-8">
-          <Link href="/dashboard" className="flex items-center gap-4 text-white">
-            <div className="size-6 text-primary">
-              <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                <path d="M39.5563 34.1455V13.8546C39.5563 15.708 36.8773 17.3437 32.7927 18.3189C30.2914 18.916 27.263 19.2655 24 19.2655C20.737 19.2655 17.7086 18.916 15.2073 18.3189C11.1227 17.3437 8.44365 15.708 8.44365 13.8546V34.1455C8.44365 35.9988 11.1227 37.6346 15.2073 38.6098C17.7086 39.2069 20.737 39.5564 24 39.5564C27.263 39.5564 30.2914 39.2069 32.7927 38.6098C36.8773 37.6346 39.5563 35.9988 39.5563 34.1455Z" fill="currentColor"></path>
-                <path clipRule="evenodd" d="M10.4485 13.8519C10.4749 13.9271 10.6203 14.246 11.379 14.7361C12.298 15.3298 13.7492 15.9145 15.6717 16.3735C18.0007 16.9296 20.8712 17.2655 24 17.2655C27.1288 17.2655 29.9993 16.9296 32.3283 16.3735C34.2508 15.9145 35.702 15.3298 36.621 14.7361C37.3796 14.246 37.5251 13.9271 37.5515 13.8519C37.5287 13.7876 37.4333 13.5973 37.0635 13.2931C36.5266 12.8516 35.6288 12.3647 34.343 11.9175C31.79 11.0295 28.1333 10.4437 24 10.4437C19.8667 10.4437 16.2099 11.0295 13.657 11.9175C12.3712 12.3647 11.4734 12.8516 10.9365 13.2931C10.5667 13.5973 10.4713 13.7876 10.4485 13.8519ZM37.5563 18.7877C36.3176 19.3925 34.8502 19.8839 33.2571 20.2642C30.5836 20.9025 27.3973 21.2655 24 21.2655C20.6027 21.2655 17.4164 20.9025 14.7429 20.2642C13.1498 19.8839 11.6824 19.3925 10.4436 18.7877V34.1275C10.4515 34.1545 10.5427 34.4867 11.379 35.027C12.298 35.6207 13.7492 36.2054 15.6717 36.6644C18.0007 37.2205 20.8712 37.5564 24 37.5564C27.1288 37.5564 29.9993 37.2205 32.3283 36.6644C34.2508 36.2054 35.702 35.6207 36.621 35.027C37.4573 34.4867 37.5485 34.1546 37.5563 34.1275V18.7877ZM41.5563 13.8546V34.1455C41.5563 36.1078 40.158 37.5042 38.7915 38.3869C37.3498 39.3182 35.4192 40.0389 33.2571 40.5551C30.5836 41.1934 27.3973 41.5564 24 41.5564C20.6027 41.5564 17.4164 41.1934 14.7429 40.5551C12.5808 40.0389 10.6502 39.3182 9.20848 38.3869C7.84205 37.5042 6.44365 36.1078 6.44365 34.1455L6.44365 13.8546C6.44365 12.2684 7.37223 11.0454 8.39581 10.2036C9.43325 9.3505 10.8137 8.67141 12.343 8.13948C15.4203 7.06909 19.5418 6.44366 24 6.44366C28.4582 6.44366 32.5797 7.06909 35.657 8.13948C37.1863 8.67141 38.5667 9.3505 39.6042 10.2036C40.6278 11.0454 41.5563 12.2684 41.5563 13.8546Z" fill="currentColor" fillRule="evenodd"></path>
-              </svg>
+import { useState, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useQuery, useMutation, useAction } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
+
+export default function CourseDetailManagePage() {
+    const params = useParams();
+    const courseId = params.id as Id<"courses">;
+
+    const course = useQuery(api.courses.getCourse, { courseId });
+    const uploads = useQuery(api.courses.getUploads, { courseId });
+    const generateUploadUrl = useMutation(api.courses.generateUploadUrl);
+    const saveUpload = useMutation(api.courses.saveUpload);
+    const processPdf = useAction(api.ingest.processPdf);
+
+    const generateStudyPlan = useAction(api.curriculum.generateStudyPlan);
+    const learningPath = useQuery(api.curriculum.getLearningPath, { courseId });
+
+    const [isUploading, setIsUploading] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+    const [processingUploadIds, setProcessingUploadIds] = useState<Set<string>>(new Set());
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleProcessPdf = async (uploadId: Id<"uploads">, storageId: Id<"_storage">) => {
+        setProcessingUploadIds(prev => new Set(prev).add(uploadId));
+        try {
+            await processPdf({ uploadId, storageId });
+        } catch (error) {
+            console.error("Processing failed:", error);
+        } finally {
+            setProcessingUploadIds(prev => {
+                const next = new Set(prev);
+                next.delete(uploadId);
+                return next;
+            });
+        }
+    };
+
+    const handleGenerateStudyPlan = async () => {
+        setIsGeneratingPlan(true);
+        try {
+            await generateStudyPlan({ courseId });
+            alert("Study plan generated successfully! You can now start studying from your dashboard.");
+        } catch (error: any) {
+            console.error("Failed to generate study plan:", error);
+            alert(error.message || "Failed to generate study plan. Please try again.");
+        } finally {
+            setIsGeneratingPlan(false);
+        }
+    };
+
+    const uploadFile = async (file: File) => {
+        if (!file) return;
+
+        setIsUploading(true);
+        try {
+            // 1. Get Upload URL
+            const postUrl = await generateUploadUrl();
+
+            // 2. Upload to Convex Storage
+            const result = await fetch(postUrl, {
+                method: "POST",
+                headers: { "Content-Type": file.type },
+                body: file,
+            });
+            const { storageId } = await result.json();
+
+            // 3. Save Metadata
+            const uploadId = await saveUpload({
+                courseId,
+                fileName: file.name,
+                fileType: file.type,
+                storageId,
+            });
+
+            // 4. Auto-trigger processing
+            if (uploadId) {
+                handleProcessPdf(uploadId, storageId);
+            }
+
+        } catch (error) {
+            console.error("Upload failed", error);
+            alert("Upload failed. Please try again.");
+        } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) uploadFile(file);
+    };
+
+    const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (file && (file.type === 'application/pdf' || file.type === 'text/plain' || file.name.endsWith('.md'))) {
+            uploadFile(file);
+        } else {
+            alert("Please drop a PDF, TXT, or MD file.");
+        }
+    }, [courseId, generateUploadUrl, saveUpload, processPdf]);
+
+    const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    }, []);
+
+    const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    }, []);
+
+    if (!course) {
+        return (
+            <div className="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary"></div>
             </div>
-            <h2 className="text-white text-xl font-black leading-tight tracking-[-0.015em] dark:text-white text-black">APEX</h2>
-          </Link>
-          <label className="flex flex-col min-w-40 !h-10 max-w-64">
-            <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
-              <div className="text-[#9da6b9] flex border-none bg-[#282e39] items-center justify-center pl-4 rounded-l-lg border-r-0">
-                <span className="material-symbols-outlined text-xl">search</span>
-              </div>
-              <input className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border-none bg-[#282e39] focus:border-none h-full placeholder:text-[#9da6b9] px-4 rounded-l-none border-l-0 pl-2 text-base font-normal" placeholder="Search courses..." defaultValue="" />
-            </div>
-          </label>
-        </div>
-        <div className="flex flex-1 justify-end gap-6 items-center">
-          <nav className="flex items-center gap-8">
-            <Link className="text-[#9da6b9] hover:text-white text-sm font-medium transition-colors" href="/dashboard">Courses</Link>
-            <Link className="text-white text-sm font-medium border-b-2 border-primary pb-1" href="/courses/manage">My Library</Link>
-            <Link className="text-[#9da6b9] hover:text-white text-sm font-medium transition-colors" href="#">AI Tools</Link>
-            <Link className="text-[#9da6b9] hover:text-white text-sm font-medium transition-colors" href="/settings">Settings</Link>
-          </nav>
-          <div className="flex gap-2">
-            <button className="flex items-center justify-center rounded-lg h-10 w-10 bg-[#282e39] text-white hover:bg-[#3b4354] transition-colors">
-              <span className="material-symbols-outlined">notifications</span>
-            </button>
-          </div>
-          <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary" data-alt="User profile avatar" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuC2iKS5fjF5hhRMWhgKJtbYB2R1MJ6-Y9GMf0Z7dLszx5wVRfT36Yb2GvdpeeD16QD0jZsTytRnSzVJWl30QvmDJNf1tGjEI35QkzTq1EFUfr0BtMc0KvwCnaIxJMiUbdNmExf572nG5IIuqddD-EnwjwAXWysDBtOhZukaFJL9Hk6lVN6BFqPS-XmGhZA3P4K5LfDnLUZTSPT0i7o3GmL2aFjTuDxkr86q0f24t6_l68ENa-cnCS57lQaF5E5qd6HD-JiyyI5eeUQ")' }}></div>
-        </div>
-      </header>
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Navigation */}
-        <aside className="w-80 border-r border-[#282e39] flex flex-col justify-between bg-background-light dark:bg-background-dark p-6">
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col">
-              <h3 className="text-white text-lg font-bold">Linear Algebra</h3>
-              <p className="text-[#9da6b9] text-sm">MATH201 • Fall 2024</p>
-            </div>
-            <div className="flex flex-col gap-1">
-              <p className="text-[#9da6b9] text-xs font-bold uppercase tracking-wider mb-2">AI Syllabus Modules</p>
-              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20 cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[20px]">dashboard</span>
-                  <span className="text-sm font-semibold">Syllabus Overview</span>
-                </div>
-                <span className="material-symbols-outlined text-sm text-primary">check_circle</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-[#9da6b9] hover:bg-[#282e39] hover:text-white transition-all cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[20px]">category</span>
-                  <span className="text-sm font-medium">Vector Spaces</span>
-                </div>
-                <span className="material-symbols-outlined text-sm text-primary">check_circle</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-[#9da6b9] hover:bg-[#282e39] hover:text-white transition-all cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[20px]">grid_on</span>
-                  <span className="text-sm font-medium">Matrix Operations</span>
-                </div>
-                <span className="material-symbols-outlined text-sm text-yellow-500">pending</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-[#9da6b9] hover:bg-[#282e39] hover:text-white transition-all cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[20px]">function</span>
-                  <span className="text-sm font-medium">Determinants</span>
-                </div>
-                <span className="material-symbols-outlined text-sm">lock</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-[#9da6b9] hover:bg-[#282e39] hover:text-white transition-all cursor-pointer opacity-50">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[20px]">bolt</span>
-                  <span className="text-sm font-medium">Eigenvalues</span>
-                </div>
-                <span className="material-symbols-outlined text-sm">lock</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-4">
-            <div className="p-4 bg-[#282e39] rounded-xl border border-[#3b4354]">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-bold text-white uppercase tracking-tighter">AI Processing</span>
-                <span className="text-xs font-bold text-primary">65%</span>
-              </div>
-              <div className="h-1.5 w-full bg-[#111318] rounded-full overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: '65%' }}></div>
-              </div>
-            </div>
-            <button className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg h-12 px-4 bg-primary text-white text-sm font-bold hover:bg-blue-600 transition-colors shadow-lg shadow-primary/20">
-              <span className="material-symbols-outlined">auto_awesome</span>
-              <span>Refresh AI Syllabus</span>
-            </button>
-          </div>
-        </aside>
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col overflow-y-auto bg-[#111318]">
-          {/* Breadcrumbs & Heading */}
-          <div className="px-8 pt-8">
-            <div className="flex flex-wrap gap-2 mb-4">
-              <Link className="text-[#9da6b9] text-sm font-medium hover:text-white" href="/dashboard">Courses</Link>
-              <span className="text-[#9da6b9] text-sm font-medium">/</span>
-              <span className="text-white text-sm font-medium">Linear Algebra</span>
-              <span className="text-[#9da6b9] text-sm font-medium">/</span>
-              <span className="text-white text-sm font-medium">Course Materials</span>
-            </div>
-            <div className="flex flex-wrap justify-between items-end gap-4 pb-8 border-b border-[#282e39]">
-              <div className="flex flex-col gap-2">
-                <h1 className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">Course Materials</h1>
-                <p className="text-[#9da6b9] text-base font-normal max-w-xl">Manage your lecture notes, presentations, and assignments. APEX will automatically transform these into interactive lessons.</p>
-              </div>
-              <button className="flex min-w-[160px] cursor-pointer items-center justify-center gap-2 rounded-lg h-12 px-6 bg-white text-black text-sm font-bold hover:bg-gray-200 transition-colors">
-                <span className="material-symbols-outlined">upload_file</span>
-                <span>Upload Material</span>
-              </button>
-            </div>
-          </div>
-          {/* Grid Content */}
-          <div className="p-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Material Card 1 */}
-              <div className="group bg-[#282e39] rounded-xl border border-[#3b4354] overflow-hidden hover:border-primary transition-all">
-                <div className="h-32 w-full bg-gradient-to-br from-red-500/20 to-red-600/10 flex items-center justify-center border-b border-[#3b4354]">
-                  <span className="material-symbols-outlined text-5xl text-red-500 group-hover:scale-110 transition-transform">picture_as_pdf</span>
-                </div>
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-white font-bold truncate">Lecture_01_Vectors.pdf</h4>
-                    <button className="text-[#9da6b9] hover:text-white"><span className="material-symbols-outlined">more_vert</span></button>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-[#9da6b9] mb-4">
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">calendar_today</span> Oct 12</span>
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">database</span> 2.4 MB</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="flex-1 py-2 bg-primary/10 text-primary text-xs font-bold rounded-lg border border-primary/20 hover:bg-primary hover:text-white transition-colors">Extract AI</button>
-                    <button className="w-10 flex items-center justify-center bg-[#111318] rounded-lg border border-[#3b4354] hover:bg-[#3b4354]"><span className="material-symbols-outlined text-sm">download</span></button>
-                  </div>
-                </div>
-              </div>
-              {/* Material Card 2 */}
-              <div className="group bg-[#282e39] rounded-xl border border-[#3b4354] overflow-hidden hover:border-primary transition-all">
-                <div className="h-32 w-full bg-gradient-to-br from-orange-500/20 to-orange-600/10 flex items-center justify-center border-b border-[#3b4354]">
-                  <span className="material-symbols-outlined text-5xl text-orange-500 group-hover:scale-110 transition-transform">present_to_all</span>
-                </div>
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-white font-bold truncate">Week2_Slides_Matrices.pptx</h4>
-                    <button className="text-[#9da6b9] hover:text-white"><span className="material-symbols-outlined">more_vert</span></button>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-[#9da6b9] mb-4">
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">calendar_today</span> Oct 18</span>
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">database</span> 12.1 MB</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1 py-2 bg-[#111318] text-[#9da6b9] text-xs font-bold rounded-lg border border-[#3b4354] flex items-center justify-center gap-2">
-                      <div className="size-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                      Processing...
+        );
+    }
+
+    const allProcessed = (uploads || []).length > 0 && uploads?.every(u => u.processingStatus === 'completed');
+    const hasLearningPath = !!learningPath;
+
+    return (
+        <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white min-h-screen font-display p-8">
+            <div className="max-w-6xl mx-auto">
+                {/* Header */}
+                <div className="flex items-center gap-4 mb-8">
+                    <Link href="/courses/manage" className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+                        <span className="material-symbols-outlined">arrow_back</span>
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-bold">{course.title}</h1>
+                        <p className="text-slate-500 dark:text-slate-400">Manage Content & Study Plan</p>
                     </div>
-                    <button className="w-10 flex items-center justify-center bg-[#111318] rounded-lg border border-[#3b4354] hover:bg-[#3b4354]"><span className="material-symbols-outlined text-sm">download</span></button>
-                  </div>
                 </div>
-              </div>
-              {/* Material Card 3 */}
-              <div className="group bg-[#282e39] rounded-xl border border-[#3b4354] overflow-hidden hover:border-primary transition-all">
-                <div className="h-32 w-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border-b border-[#3b4354]">
-                  <span className="material-symbols-outlined text-5xl text-primary group-hover:scale-110 transition-transform">article</span>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* Upload Section with Drag and Drop */}
+                        <div
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            className={`bg-white dark:bg-[#1c1f27] border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
+                                ${isDragging
+                                    ? 'border-primary bg-primary/5 dark:bg-primary/10 scale-[1.02]'
+                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                }`}
+                        >
+                            <div className="max-w-md mx-auto">
+                                <div className={`size-20 rounded-full flex items-center justify-center mx-auto mb-4 transition-colors
+                                    ${isDragging
+                                        ? 'bg-primary/20 text-primary'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                                    }`}>
+                                    <span className="material-symbols-outlined text-4xl">
+                                        {isDragging ? 'file_download' : 'cloud_upload'}
+                                    </span>
+                                </div>
+                                <h3 className="text-xl font-bold mb-2">
+                                    {isDragging ? 'Drop your file here!' : 'Upload Course Materials'}
+                                </h3>
+                                <p className="text-slate-500 dark:text-[#9da6b9] text-sm mb-6">
+                                    {isDragging
+                                        ? 'Release to upload your file'
+                                        : 'Drag & drop your files here, or click to browse. Supports PDF, TXT, and MD files.'
+                                    }
+                                </p>
+
+                                <input
+                                    type="file"
+                                    accept=".pdf,.txt,.md"
+                                    ref={fileInputRef}
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                />
+
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploading}
+                                    className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-lg font-bold w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {isUploading ? (
+                                        <>
+                                            <span className="animate-spin size-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                                            Uploading & Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-symbols-outlined text-lg">folder_open</span>
+                                            Browse Files
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Uploads List */}
+                        <div>
+                            <h3 className="text-xl font-bold mb-4">Uploaded Files</h3>
+                            <div className="bg-white dark:bg-[#1c1f27] border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                                {(uploads || []).length > 0 ? (
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-50 dark:bg-slate-800/50">
+                                            <tr>
+                                                <th className="p-4 text-xs font-bold uppercase text-slate-500 dark:text-[#9da6b9]">File Name</th>
+                                                <th className="p-4 text-xs font-bold uppercase text-slate-500 dark:text-[#9da6b9]">Status</th>
+                                                <th className="p-4 text-xs font-bold uppercase text-slate-500 dark:text-[#9da6b9] text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                            {uploads?.map((upload: any) => (
+                                                <tr key={upload._id}>
+                                                    <td className="p-4 font-medium flex items-center gap-3 text-slate-900 dark:text-white">
+                                                        <span className="material-symbols-outlined text-slate-400">description</span>
+                                                        <div className="flex flex-col">
+                                                            <span className="truncate max-w-[200px]">{upload.fileName}</span>
+                                                            <span className="text-[10px] text-slate-400 capitalize">{upload.fileType.split('/')[1] || 'File'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
+                                                            ${upload.processingStatus === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                                upload.processingStatus === 'processing' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                                    upload.processingStatus === 'failed' ? 'bg-red-100 text-red-700' :
+                                                                        'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                                                            {upload.processingStatus === 'processing' && <span className="animate-spin size-2 bg-current rounded-full"></span>}
+                                                            {upload.processingStatus}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <div className="flex justify-end">
+                                                            {processingUploadIds.has(upload._id) ? (
+                                                                <span className="text-blue-500 text-xs font-bold flex items-center gap-1.5">
+                                                                    <span className="animate-spin size-3 border-2 border-blue-300 border-t-blue-600 rounded-full"></span>
+                                                                    Processing...
+                                                                </span>
+                                                            ) : (
+                                                                <>
+                                                                    {upload.processingStatus === 'pending' && (
+                                                                        <button
+                                                                            onClick={() => handleProcessPdf(upload._id, upload.storageId)}
+                                                                            className="text-primary text-xs font-bold hover:underline"
+                                                                        >
+                                                                            Process
+                                                                        </button>
+                                                                    )}
+                                                                    {upload.processingStatus === 'failed' && (
+                                                                        <button
+                                                                            onClick={() => handleProcessPdf(upload._id, upload.storageId)}
+                                                                            className="text-red-500 text-xs font-bold hover:underline flex items-center gap-1"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-sm">refresh</span>
+                                                                            Retry
+                                                                        </button>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <div className="p-12 text-center text-slate-400 dark:text-[#9da6b9]">
+                                        No files uploaded yet.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        {/* Study Plan Status Card */}
+                        <div className="bg-white dark:bg-[#1c1f27] border border-slate-100 dark:border-slate-800 rounded-xl p-6 h-fit sticky top-8">
+                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary">auto_awesome</span>
+                                AI Study Plan
+                            </h3>
+
+                            {!hasLearningPath ? (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-slate-500 dark:text-[#9da6b9]">
+                                        {allProcessed
+                                            ? "Great! All your files are processed. Now let Gemini create a customized study plan for you."
+                                            : "Upload and process your materials first. Then Gemini will build your structured learning path."}
+                                    </p>
+                                    <button
+                                        onClick={handleGenerateStudyPlan}
+                                        disabled={!allProcessed || isGeneratingPlan}
+                                        className="w-full bg-primary hover:bg-primary/90 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all"
+                                    >
+                                        {isGeneratingPlan ? (
+                                            <>
+                                                <span className="animate-spin size-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                                                Building Curriculum...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-symbols-outlined">rocket_launch</span>
+                                                Generate Study Plan
+                                            </>
+                                        )}
+                                    </button>
+                                    {!allProcessed && (uploads || []).length > 0 && (
+                                        <p className="text-[10px] text-center text-amber-500 font-medium">
+                                            Wait for all files to finish processing
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg">
+                                        <span className="material-symbols-outlined text-green-500">check_circle</span>
+                                        <div>
+                                            <p className="text-sm font-bold text-green-700 dark:text-green-400">Path Generated</p>
+                                            <p className="text-xs text-green-600/70 dark:text-green-400/70">{learningPath.modules.length} Modules ready</p>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-slate-500 dark:text-[#9da6b9]">
+                                        Your curriculum is ready! You can now start your interactive lessons and quizzes.
+                                    </p>
+                                    <div className="space-y-2">
+                                        <Link
+                                            href="/dashboard"
+                                            className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all"
+                                        >
+                                            Go to Dashboard
+                                        </Link>
+                                        <button
+                                            onClick={handleGenerateStudyPlan}
+                                            className="w-full text-slate-400 text-xs font-bold hover:text-primary transition-colors py-2"
+                                        >
+                                            Regenerate Plan
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Quick Tips */}
+                        <div className="p-6 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800">
+                            <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-sm">lightbulb</span>
+                                Study Tip
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                                Use high-quality PDF slides or structured notes for the best AI-generated lessons.
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-white font-bold truncate">Problem_Set_1.pdf</h4>
-                    <button className="text-[#9da6b9] hover:text-white"><span className="material-symbols-outlined">more_vert</span></button>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-[#9da6b9] mb-4">
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">calendar_today</span> Oct 20</span>
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">database</span> 0.8 MB</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="flex-1 py-2 bg-primary/10 text-primary text-xs font-bold rounded-lg border border-primary/20 hover:bg-primary hover:text-white transition-colors">Extract AI</button>
-                    <button className="w-10 flex items-center justify-center bg-[#111318] rounded-lg border border-[#3b4354] hover:bg-[#3b4354]"><span className="material-symbols-outlined text-sm">download</span></button>
-                  </div>
-                </div>
-              </div>
-              {/* Dropzone Empty State */}
-              <div className="border-2 border-dashed border-[#3b4354] rounded-xl flex flex-col items-center justify-center p-8 bg-[#111318]/50 hover:bg-primary/5 hover:border-primary transition-all group cursor-pointer h-full min-h-[250px]">
-                <div className="size-12 rounded-full bg-[#282e39] flex items-center justify-center mb-4 group-hover:bg-primary transition-colors">
-                  <span className="material-symbols-outlined text-white">add</span>
-                </div>
-                <p className="text-white font-bold text-sm">Add New Resource</p>
-                <p className="text-[#9da6b9] text-xs mt-1">Drag and drop files here</p>
-              </div>
             </div>
-            {/* Summary Row */}
-            <div className="mt-12 p-6 bg-[#282e39] rounded-xl border border-[#3b4354] flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div className="flex flex-col">
-                  <p className="text-[#9da6b9] text-xs font-bold uppercase">Total Materials</p>
-                  <p className="text-white text-2xl font-black">12</p>
-                </div>
-                <div className="w-px h-10 bg-[#3b4354]"></div>
-                <div className="flex flex-col">
-                  <p className="text-[#9da6b9] text-xs font-bold uppercase">Syllabus Length</p>
-                  <p className="text-white text-2xl font-black">18 Units</p>
-                </div>
-                <div className="w-px h-10 bg-[#3b4354]"></div>
-                <div className="flex flex-col">
-                  <p className="text-[#9da6b9] text-xs font-bold uppercase">Last Sync</p>
-                  <p className="text-white text-2xl font-black">2h ago</p>
-                </div>
-              </div>
-              <button className="flex items-center gap-2 text-[#9da6b9] hover:text-white text-sm font-bold transition-colors">
-                <span className="material-symbols-outlined">download_done</span>
-                Download Course Summary
-              </button>
-            </div>
-          </div>
-        </main>
-      </div>
-    </div>
-  );
+        </div>
+    );
 }
