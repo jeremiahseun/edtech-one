@@ -1,6 +1,68 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { useOnboardingStore } from '@/app/store/useOnboardingStore';
 
 export default function Onboarding() {
+  const router = useRouter();
+  const { step, major, studyStruggle, setStep, setMajor, setStudyStruggle } = useOnboardingStore();
+  const updateOnboarding = useMutation(api.users.updateOnboarding);
+  const user = useQuery(api.users.getUser);
+
+  // Local loading state for sync
+  const [isSynced, setIsSynced] = useState(false);
+
+  useEffect(() => {
+    if (user && !isSynced) {
+      if (user.major) setMajor(user.major);
+      if (user.studyStruggle) setStudyStruggle(user.studyStruggle);
+      if (user.onboardingCompleted) {
+         // Optionally redirect here if already completed, but AuthCheck usually handles it.
+         // But for better UX, if they land here manually:
+         router.replace('/dashboard');
+      }
+      setIsSynced(true);
+    }
+  }, [user, isSynced, setMajor, setStudyStruggle, router]);
+
+  const handleNext = () => {
+    if (step === 1 && major) {
+      setStep(2);
+    } else if (step === 2 && studyStruggle) {
+       handleContinue();
+    }
+  };
+
+  const handleBack = () => {
+    if (step === 2) {
+      setStep(1);
+    } else {
+        router.push('/');
+    }
+  };
+
+  const handleSaveExit = async () => {
+    await updateOnboarding({
+        major,
+        studyStruggle,
+        onboardingCompleted: false
+    });
+    router.push('/dashboard');
+  };
+
+  const handleContinue = async () => {
+     await updateOnboarding({
+        major,
+        studyStruggle,
+        onboardingCompleted: true
+     });
+     router.push('/dashboard');
+  };
+
   return (
     <div className="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white min-h-screen">
       <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden">
@@ -16,7 +78,9 @@ export default function Onboarding() {
             <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">APEX</h2>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-white text-sm font-medium transition-colors">Save & Exit</Link>
+            <button onClick={handleSaveExit} className="text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-white text-sm font-medium transition-colors cursor-pointer">
+              Save & Exit
+            </button>
             <button className="flex min-w-[84px] cursor-pointer items-center justify-center rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold transition-all hover:bg-blue-600">
               Help
             </button>
@@ -27,80 +91,126 @@ export default function Onboarding() {
             {/* Progress Bar Component */}
             <div className="flex flex-col gap-3 mb-10 w-full">
               <div className="flex gap-6 justify-between items-center">
-                <p className="text-slate-900 dark:text-white text-base font-semibold">Step 2 of 4</p>
-                <p className="text-slate-900 dark:text-white text-sm font-medium">50%</p>
+                <p className="text-slate-900 dark:text-white text-base font-semibold">Step {step} of 2</p>
+                <p className="text-slate-900 dark:text-white text-sm font-medium">{step === 1 ? '50%' : '100%'}</p>
               </div>
               <div className="rounded-full bg-slate-200 dark:bg-[#3b4354] overflow-hidden">
-                <div className="h-2 rounded-full bg-primary" style={{ width: '50%' }}></div>
+                <div className="h-2 rounded-full bg-primary transition-all duration-300" style={{ width: step === 1 ? '50%' : '100%' }}></div>
               </div>
               <p className="text-slate-500 dark:text-[#9da6b9] text-sm font-normal">Personalizing your experience</p>
             </div>
-            {/* Headline Component */}
-            <div className="mb-10 text-center">
-              <h1 className="text-slate-900 dark:text-white tracking-tight text-3xl lg:text-4xl font-bold leading-tight mb-2">Tell us a bit about yourself</h1>
-              <p className="text-slate-500 dark:text-slate-400">Help APEX understand your academic background to better tailor your study materials.</p>
-            </div>
-            {/* Dropdown Field Section */}
-            <div className="flex flex-col gap-4 mb-12">
-              <h2 className="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">What&apos;s your major?</h2>
-              <div className="w-full">
-                <label className="flex flex-col w-full">
-                  <select defaultValue="" className="custom-select-icon flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-xl text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-slate-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] h-14 placeholder:text-slate-400 dark:placeholder:text-[#9da6b9] px-4 text-base font-normal transition-all">
-                    <option disabled value="">e.g., Computer Science, Nursing...</option>
-                    <option value="cs">Computer Science</option>
-                    <option value="biology">Biology & Life Sciences</option>
-                    <option value="business">Business Administration</option>
-                    <option value="engineering">Engineering</option>
-                    <option value="nursing">Nursing & Healthcare</option>
-                    <option value="psychology">Psychology</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            {/* Selectable Cards Section */}
-            <div className="flex flex-col gap-6 mb-12">
-              <h2 className="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">What&apos;s your biggest study struggle?</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Option 1 */}
-                <div className="flex flex-col p-6 rounded-xl border-2 border-slate-200 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] cursor-pointer hover:border-primary/50 transition-all group active:scale-95">
-                  <div className="size-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                    <span className="material-symbols-outlined text-3xl">timer</span>
-                  </div>
-                  <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Procrastination</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Hard to get started on tasks.</p>
+
+            {/* Step 1: Major Selection */}
+            {step === 1 && (
+              <>
+                <div className="mb-10 text-center">
+                  <h1 className="text-slate-900 dark:text-white tracking-tight text-3xl lg:text-4xl font-bold leading-tight mb-2">Tell us a bit about yourself</h1>
+                  <p className="text-slate-500 dark:text-slate-400">Help APEX understand your academic background to better tailor your study materials.</p>
                 </div>
-                {/* Option 2 (Selected State Example) */}
-                <div className="flex flex-col p-6 rounded-xl border-2 border-primary bg-primary/5 dark:bg-primary/10 cursor-pointer transition-all active:scale-95 relative overflow-hidden">
-                  <div className="absolute top-3 right-3 text-primary">
-                    <span className="material-symbols-outlined fill-1" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                <div className="flex flex-col gap-4 mb-12">
+                  <h2 className="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">What&apos;s your major?</h2>
+                  <div className="w-full">
+                    <label className="flex flex-col w-full">
+                      <select
+                        value={major}
+                        onChange={(e) => setMajor(e.target.value)}
+                        className="custom-select-icon flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-xl text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-slate-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] h-14 placeholder:text-slate-400 dark:placeholder:text-[#9da6b9] px-4 text-base font-normal transition-all"
+                      >
+                        <option disabled value="">e.g., Computer Science, Nursing...</option>
+                        <option value="cs">Computer Science</option>
+                        <option value="biology">Biology & Life Sciences</option>
+                        <option value="business">Business Administration</option>
+                        <option value="engineering">Engineering</option>
+                        <option value="nursing">Nursing & Healthcare</option>
+                        <option value="psychology">Psychology</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
                   </div>
-                  <div className="size-12 rounded-lg bg-primary flex items-center justify-center mb-4 text-white">
-                    <span className="material-symbols-outlined text-3xl">psychology</span>
-                  </div>
-                  <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Hard Concepts</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Complex topics take too long to grasp.</p>
                 </div>
-                {/* Option 3 */}
-                <div className="flex flex-col p-6 rounded-xl border-2 border-slate-200 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] cursor-pointer hover:border-primary/50 transition-all group active:scale-95">
-                  <div className="size-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                    <span className="material-symbols-outlined text-3xl">auto_stories</span>
-                  </div>
-                  <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Boring Reading</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Dense textbooks are draining.</p>
+              </>
+            )}
+
+            {/* Step 2: Struggle Selection */}
+            {step === 2 && (
+              <>
+                <div className="mb-10 text-center">
+                   <h1 className="text-slate-900 dark:text-white tracking-tight text-3xl lg:text-4xl font-bold leading-tight mb-2">How do you study best?</h1>
+                   <p className="text-slate-500 dark:text-slate-400">We will adapt the AI persona to help you overcome these challenges.</p>
                 </div>
-              </div>
-            </div>
+                <div className="flex flex-col gap-6 mb-12">
+                  <h2 className="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">What&apos;s your biggest study struggle?</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Option 1 */}
+                    <div
+                      onClick={() => setStudyStruggle('procrastination')}
+                      className={`flex flex-col p-6 rounded-xl border-2 cursor-pointer transition-all group active:scale-95 ${studyStruggle === 'procrastination' ? 'border-primary bg-primary/5 dark:bg-primary/10 relative overflow-hidden' : 'border-slate-200 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] hover:border-primary/50'}`}
+                    >
+                      {studyStruggle === 'procrastination' && (
+                        <div className="absolute top-3 right-3 text-primary">
+                          <span className="material-symbols-outlined fill-1" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                        </div>
+                      )}
+                      <div className={`size-12 rounded-lg flex items-center justify-center mb-4 transition-colors ${studyStruggle === 'procrastination' ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-primary group-hover:bg-primary group-hover:text-white'}`}>
+                        <span className="material-symbols-outlined text-3xl">timer</span>
+                      </div>
+                      <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Procrastination</h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Hard to get started on tasks.</p>
+                    </div>
+                    {/* Option 2 */}
+                    <div
+                      onClick={() => setStudyStruggle('hard_concepts')}
+                      className={`flex flex-col p-6 rounded-xl border-2 cursor-pointer transition-all group active:scale-95 ${studyStruggle === 'hard_concepts' ? 'border-primary bg-primary/5 dark:bg-primary/10 relative overflow-hidden' : 'border-slate-200 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] hover:border-primary/50'}`}
+                    >
+                      {studyStruggle === 'hard_concepts' && (
+                        <div className="absolute top-3 right-3 text-primary">
+                          <span className="material-symbols-outlined fill-1" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                        </div>
+                      )}
+                      <div className={`size-12 rounded-lg flex items-center justify-center mb-4 transition-colors ${studyStruggle === 'hard_concepts' ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-primary group-hover:bg-primary group-hover:text-white'}`}>
+                        <span className="material-symbols-outlined text-3xl">psychology</span>
+                      </div>
+                      <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Hard Concepts</h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Complex topics take too long to grasp.</p>
+                    </div>
+                    {/* Option 3 */}
+                    <div
+                      onClick={() => setStudyStruggle('boring_reading')}
+                      className={`flex flex-col p-6 rounded-xl border-2 cursor-pointer transition-all group active:scale-95 ${studyStruggle === 'boring_reading' ? 'border-primary bg-primary/5 dark:bg-primary/10 relative overflow-hidden' : 'border-slate-200 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] hover:border-primary/50'}`}
+                    >
+                       {studyStruggle === 'boring_reading' && (
+                        <div className="absolute top-3 right-3 text-primary">
+                          <span className="material-symbols-outlined fill-1" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                        </div>
+                      )}
+                      <div className={`size-12 rounded-lg flex items-center justify-center mb-4 transition-colors ${studyStruggle === 'boring_reading' ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-primary group-hover:bg-primary group-hover:text-white'}`}>
+                        <span className="material-symbols-outlined text-3xl">auto_stories</span>
+                      </div>
+                      <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Boring Reading</h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Dense textbooks are draining.</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Navigation Buttons */}
             <div className="flex items-center justify-between mt-4">
-              <Link href="/" className="flex items-center gap-2 px-6 py-3 rounded-lg border border-slate-300 dark:border-[#3b4354] text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
+              <button
+                onClick={handleBack}
+                className="flex items-center gap-2 px-6 py-3 rounded-lg border border-slate-300 dark:border-[#3b4354] text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              >
                 <span className="material-symbols-outlined">arrow_back</span>
                 Back
-              </Link>
-              <Link href="/dashboard" className="flex items-center gap-2 px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-blue-600 transition-all shadow-lg shadow-primary/20">
-                Continue
+              </button>
+              <button
+                onClick={handleNext}
+                disabled={step === 1 ? !major : !studyStruggle}
+                className="flex items-center gap-2 px-10 py-3 rounded-lg bg-primary text-white font-bold hover:bg-blue-600 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {step === 2 ? 'Finish' : 'Continue'}
                 <span className="material-symbols-outlined">arrow_forward</span>
-              </Link>
+              </button>
             </div>
           </div>
         </main>

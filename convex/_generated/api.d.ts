@@ -8,8 +8,14 @@
  * @module
  */
 
+import type * as aml from "../aml.js";
+import type * as analytics from "../analytics.js";
+import type * as courses from "../courses.js";
+import type * as curriculum from "../curriculum.js";
+import type * as dashboard from "../dashboard.js";
 import type * as ingest from "../ingest.js";
 import type * as llm from "../llm.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -18,8 +24,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aml: typeof aml;
+  analytics: typeof analytics;
+  courses: typeof courses;
+  curriculum: typeof curriculum;
+  dashboard: typeof dashboard;
   ingest: typeof ingest;
   llm: typeof llm;
+  users: typeof users;
 }>;
 
 /**
